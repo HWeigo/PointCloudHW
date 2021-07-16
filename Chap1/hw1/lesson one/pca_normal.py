@@ -1,70 +1,98 @@
-# 实现PCA分析和法向量计算，并加载数据集中的文件进行验证
+#%%
 
-import open3d [as o3d]
-import os
 import numpy as np
-from pyntcloud import PyntCloud
+import open3d as o3d
+import os
 
+
+#%%
 
 # 功能：计算PCA的函数
 # 输入：
 #     data：点云，NX3的矩阵
-#     correlation：区分np的cov和corrcoef，不输入时默认为False
-#     sort: 特征值排序，排序是为了其他功能方便使用，不输入时默认为True
 # 输出：
 #     eigenvalues：特征值
 #     eigenvectors：特征向量
-def PCA(data, correlation=False, sort=True):
-    # 作业1
-    # 屏蔽开始
+def PCA(data):
+    if type(data) is o3d.cpu.pybind.utility.Vector3dVector:
+        pcd = np.asarray(data)
+    else:
+        pcd = data
 
-    # 屏蔽结束
+    if pcd.ndim is not 3:
+        pcd = np.transpose(pcd)
 
-    if sort:
-        sort = eigenvalues.argsort()[::-1]
-        eigenvalues = eigenvalues[sort]
-        eigenvectors = eigenvectors[:, sort]
+    # Normalization
+    mean = pcd.mean(axis=1, keepdims=True)
+    pcd = pcd - mean
+
+    # Implement SVD
+    H = np.dot(pcd, pcd.T)
+    u, s, vt = np.linalg.svd(H, hermitian=True)
+
+    ##or directly use SVD to decompose pcd matrix, u is the same as above
+    #u, s, vt = np.linalg.svd(pcd, hermitian=False)
+
+    eigenvalues = s
+    eigenvectors = u
 
     return eigenvalues, eigenvectors
 
+#%%
 
 def main():
-    # 指定点云路径
-    # cat_index = 10 # 物体编号，范围是0-39，即对应数据集中40个物体
-    # root_dir = '/Users/renqian/cloud_lesson/ModelNet40/ply_data_points' # 数据集路径
-    # cat = os.listdir(root_dir)
-    # filename = os.path.join(root_dir, cat[cat_index],'train', cat[cat_index]+'_0001.ply') # 默认使用第一个点云
+    # Load Point Cloud
+    cat_index = 0
+    root_dir = "../../modelnet40_normal_resampled/"
+    models = os.listdir(root_dir)
+    models = sorted(models)
+    filename = os.path.join(root_dir, models[cat_index], models[cat_index] + '_0001.txt')
 
-    # 加载原始点云
-    point_cloud_pynt = PyntCloud.from_file("/Users/renqian/Downloads/program/cloud_data/11.ply")
-    point_cloud_o3d = point_cloud_pynt.to_instance("open3d", mesh=False)
-    # o3d.visualization.draw_geometries([point_cloud_o3d]) # 显示原始点云
+    pcd_array = np.loadtxt(filename, delimiter=',')[:, 0:3]
+    pcd = o3d.geometry.PointCloud()
+    pcd.points = o3d.utility.Vector3dVector(pcd_array)
+    print("Number of point cloud: ", pcd_array.shape[0])
 
-    # 从点云中获取点，只对点进行处理
-    points = point_cloud_pynt.points
-    print('total points number is:', points.shape[0])
+    w, v = PCA(pcd.points)
+    ori_1st = v[:, 0]
+    print("The main orientation of point cloud:", ori_1st)
 
-    # 用PCA分析点云主方向
-    w, v = PCA(points)
-    point_cloud_vector = v[:, 2]  # 点云主方向对应的向量
-    print('the main orientation of this pointcloud is: ', point_cloud_vector)
-    # TODO: 此处只显示了点云，还没有显示PCA
-    # o3d.visualization.draw_geometries([point_cloud_o3d])
+    # Draw main orientation
+    # Note 1st/2nd/3rd orientation is marked as red/green/blue
+    ori_points = [v[:,0], v[:,0]*-1, v[:,1], v[:,1]*-1, v[:,2], v[:,2]*-1]
+    ori_lines = [[0,1], [2,3], [4,5]]
+    ori_colors = [[1,0,0], [0,1,0], [0,0,1]]
+    line_set = o3d.geometry.LineSet()
+    line_set.points = o3d.utility.Vector3dVector(ori_points)
+    line_set.lines = o3d.utility.Vector2iVector(ori_lines)
+    line_set.colors = o3d.utility.Vector3dVector(ori_colors)
 
-    # 循环计算每个点的法向量
-    pcd_tree = o3d.geometry.KDTreeFlann(point_cloud_o3d)
+    # Visualization
+    o3d.visualization.draw_geometries([pcd, line_set])
+
+    # Build KD-Tree
+    pcd_tree = o3d.geometry.KDTreeFlann(pcd)
     normals = []
     # 作业2
     # 屏蔽开始
-
-    # 由于最近邻搜索是第二章的内容，所以此处允许直接调用open3d中的函数
+    neighbor_size = 10
+    for i in range(pcd_array.shape[0]):
+        # Get the neighbor points' index within neighbor_size
+        _, idx, _ = pcd_tree.search_knn_vector_3d(pcd.points[i], neighbor_size)
+        # Perform PCA
+        _, v = PCA(np.asarray(pcd.points)[idx, :])
+        normals.append(v[:,2])
 
     # 屏蔽结束
-    normals = np.array(normals, dtype=np.float64)
-    # TODO: 此处把法向量存放在了normals中
-    point_cloud_o3d.normals = o3d.utility.Vector3dVector(normals)
-    o3d.visualization.draw_geometries([point_cloud_o3d])
 
+    normals = np.array(normals, dtype=np.float64)
+    # Store normal vector into point cloud's normal property. Press "N" to visualize.
+    pcd.normals = o3d.utility.Vector3dVector(normals)
+    o3d.visualization.draw_geometries([pcd])
+
+
+#%%
 
 if __name__ == '__main__':
     main()
+
