@@ -7,6 +7,7 @@ import time
 
 from result_set import KNNResultSet, RadiusNNResultSet
 
+
 # 节点，构成OCtree的基本元素
 class Octant:
     def __init__(self, children, center, extent, point_indices, is_leaf):
@@ -24,6 +25,7 @@ class Octant:
         output += 'children: ' + str([x is not None for x in self.children]) + ", "
         output += 'point_indices: ' + str(self.point_indices)
         return output
+
 
 # 功能：翻转octree
 # 输入：
@@ -43,6 +45,7 @@ def traverse_octree(root: Octant, depth, max_depth):
         for child in root.children:
             traverse_octree(child, depth, max_depth)
     depth[0] -= 1
+
 
 # 功能：通过递归的方式构建octree
 # 输入：
@@ -66,9 +69,40 @@ def octree_recursive_build(root, db, center, extent, point_indices, leaf_size, m
     else:
         # 作业4
         # 屏蔽开始
-        
+        root.is_leaf = False
+        children_indices = [[] for i in range(8)]
+        for pnt_idx in point_indices:
+            pnt = db[pnt_idx]
+            child_idx = 0
+            if pnt[0] > center[0]:
+                # child_idx += 1
+                child_idx |= 1
+            if pnt[1] > center[1]:
+                # child_idx += 2
+                child_idx |= 2
+            if pnt[2] > center[2]:
+                # child_idx += 4
+                child_idx |= 4
+            children_indices[child_idx].append(pnt_idx)
+
+        # child_extent = extent / 2
+        factors = [-0.5, 0.5]
+        for i in range(8):
+            temp_center = np.zeros(3)
+            temp_center[0] = center[0] + extent * factors[(i & 1) != 0]
+            temp_center[1] = center[1] + extent * factors[(i & 2) != 0]
+            temp_center[2] = center[2] + extent * factors[(i & 4) != 0]
+            root.children[i] = octree_recursive_build(root.children[i],
+                                                      db,
+                                                      temp_center,
+                                                      extent/2,
+                                                      children_indices[i],
+                                                      leaf_size,
+                                                      min_extent)
+
         # 屏蔽结束
     return root
+
 
 # 功能：判断当前query区间是否在octant内
 # 输入：
@@ -77,7 +111,7 @@ def octree_recursive_build(root, db, center, extent, point_indices, leaf_size, m
 #     octant：octree
 # 输出：
 #     判断结果，即True/False
-def inside(query: np.ndarray, radius: float, octant:Octant):
+def inside(query: np.ndarray, radius: float, octant: Octant):
     """
     Determines if the query ball is inside the octant
     :param query:
@@ -90,6 +124,7 @@ def inside(query: np.ndarray, radius: float, octant:Octant):
     possible_space = query_offset_abs + radius
     return np.all(possible_space < octant.extent)
 
+
 # 功能：判断当前query区间是否和octant有重叠部分
 # 输入：
 #     query: 索引信息
@@ -97,7 +132,7 @@ def inside(query: np.ndarray, radius: float, octant:Octant):
 #     octant：octree
 # 输出：
 #     判断结果，即True/False
-def overlaps(query: np.ndarray, radius: float, octant:Octant):
+def overlaps(query: np.ndarray, radius: float, octant: Octant):
     """
     Determines if the query ball overlaps with the octant
     :param query:
@@ -134,7 +169,7 @@ def overlaps(query: np.ndarray, radius: float, octant:Octant):
 #     octant：octree
 # 输出：
 #     判断结果，即True/False
-def contains(query: np.ndarray, radius: float, octant:Octant):
+def contains(query: np.ndarray, radius: float, octant: Octant):
     """
     Determine if the query ball contains the octant
     :param query:
@@ -147,6 +182,7 @@ def contains(query: np.ndarray, radius: float, octant:Octant):
 
     query_offset_to_farthest_corner = query_offset_abs + octant.extent
     return np.linalg.norm(query_offset_to_farthest_corner) < radius
+
 
 # 功能：在octree中查找信息
 # 输入：
@@ -161,7 +197,7 @@ def octree_radius_search_fast(root: Octant, db: np.ndarray, result_set: RadiusNN
     # 作业5
     # 提示：尽量利用上面的inside、overlaps、contains等函数
     # 屏蔽开始
-    
+
     # 屏蔽结束
 
     return inside(query, result_set.worstDist(), root)
@@ -188,11 +224,12 @@ def octree_radius_search(root: Octant, db: np.ndarray, result_set: RadiusNNResul
 
     # 作业6
     # 屏蔽开始
-    
+
     # 屏蔽结束
 
     # final check of if we can stop search
     return inside(query, result_set.worstDist(), root)
+
 
 # 功能：在octree中查找最近的k个近邻
 # 输入：
@@ -215,11 +252,12 @@ def octree_knn_search(root: Octant, db: np.ndarray, result_set: KNNResultSet, qu
 
     # 作业7
     # 屏蔽开始
-    
+
     # 屏蔽结束
 
     # final check of if we can stop search
     return inside(query, result_set.worstDist(), root)
+
 
 # 功能：构建octree，即通过调用octree_recursive_build函数实现对外接口
 # 输入：
@@ -228,6 +266,7 @@ def octree_knn_search(root: Octant, db: np.ndarray, result_set: KNNResultSet, qu
 #    min_extent：最小划分区间
 def octree_construction(db_np, leaf_size, min_extent):
     N, dim = db_np.shape[0], db_np.shape[1]
+    assert dim == 3
     db_np_min = np.amin(db_np, axis=0)
     db_np_max = np.amax(db_np, axis=0)
     db_extent = np.max(db_np_max - db_np_min) * 0.5
@@ -238,6 +277,7 @@ def octree_construction(db_np, leaf_size, min_extent):
                                   leaf_size, min_extent)
 
     return root
+
 
 def main():
     # configuration
@@ -280,11 +320,10 @@ def main():
     print("Radius search fast:")
     for i in range(100):
         query = np.random.rand(3)
-        result_set = RadiusNNResultSet(radius = 0.5)
+        result_set = RadiusNNResultSet(radius=0.5)
         octree_radius_search_fast(root, db_np, result_set, query)
     # print(result_set)
-    print("Search takes %.3fms\n" % ((time.time() - begin_t)*1000))
-
+    print("Search takes %.3fms\n" % ((time.time() - begin_t) * 1000))
 
 
 if __name__ == '__main__':

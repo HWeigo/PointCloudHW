@@ -6,11 +6,11 @@ import numpy as np
 import time
 import os
 import struct
+from scipy.spatial import KDTree
 
 import octree as octree
 import kdtree as kdtree
 from result_set import KNNResultSet, RadiusNNResultSet
-
 
 def read_velodyne_bin(path):
     '''
@@ -23,34 +23,35 @@ def read_velodyne_bin(path):
         pc_iter = struct.iter_unpack('ffff', content)
         for idx, point in enumerate(pc_iter):
             pc_list.append([point[0], point[1], point[2]])
-    return np.asarray(pc_list, dtype=np.float32).T
-
+    return np.asarray(pc_list, dtype=np.float32)
 
 def main():
     # configuration
     leaf_size = 32
     min_extent = 0.0001
     k = 8
-    radius = 1
+    radius = 1.0
 
-    root_dir = './testset/'  # 数据集路径
-    cat = os.listdir(root_dir)
-    iteration_num = len(cat)
+    root_dir = './' # 数据集路径
+    files = os.listdir(root_dir)
 
-    print("octree --------------")
     construction_time_sum = 0
     knn_time_sum = 0
     radius_time_sum = 0
     brute_time_sum = 0
-    for i in range(iteration_num):
-        filename = os.path.join(root_dir, cat[i])
+    iteration_num = 0
+    for file in files:
+        if file.find('bin') == -1:
+            continue
+        iteration_num += 1
+        filename = os.path.join(root_dir, file)
         db_np = read_velodyne_bin(filename)
-        db_np = np.transpose(db_np)
+
         begin_t = time.time()
         root = octree.octree_construction(db_np, leaf_size, min_extent)
         construction_time_sum += time.time() - begin_t
 
-        query = db_np[0, :]
+        query = db_np[0,:]
 
         begin_t = time.time()
         result_set = KNNResultSet(capacity=k)
@@ -67,42 +68,91 @@ def main():
         nn_idx = np.argsort(diff)
         nn_dist = diff[nn_idx]
         brute_time_sum += time.time() - begin_t
-    print("Octree: build %.3f, knn %.3f, radius %.3f, brute %.3f" % (construction_time_sum * 1000 / iteration_num,
-                                                                     knn_time_sum * 1000 / iteration_num,
-                                                                     radius_time_sum * 1000 / iteration_num,
-                                                                     brute_time_sum * 1000 / iteration_num))
+    print("Octree: build %.3f, knn %.3f, radius %.3f, brute %.3f" % (construction_time_sum*1000/iteration_num,
+                                                                     knn_time_sum*1000/iteration_num,
+                                                                     radius_time_sum*1000/iteration_num,
+                                                                     brute_time_sum*1000/iteration_num))
 
-    print("kdtree --------------")
+    print("--------------")
     construction_time_sum = 0
     knn_time_sum = 0
     radius_time_sum = 0
     brute_time_sum = 0
-    for i in range(iteration_num):
-        filename = os.path.join(root_dir, cat[i])
+    iteration_num = 0
+    for file in files:
+        if file.find('bin') == -1:
+            continue
+        iteration_num += 1
+        filename = os.path.join(root_dir, file)
         db_np = read_velodyne_bin(filename)
 
         begin_t = time.time()
         root = kdtree.kdtree_construction(db_np, leaf_size)
         construction_time_sum += time.time() - begin_t
 
-        query = db_np[0, :]
+        query = db_np[0,:]
 
         begin_t = time.time()
         result_set = KNNResultSet(capacity=k)
         kdtree.kdtree_knn_search(root, db_np, result_set, query)
+        # print(result_set)
         knn_time_sum += time.time() - begin_t
-
+        # print("--------")
         begin_t = time.time()
         result_set = RadiusNNResultSet(radius=radius)
         kdtree.kdtree_radius_search(root, db_np, result_set, query)
+        # print(result_set)
         radius_time_sum += time.time() - begin_t
-
+        #print("--------")
         begin_t = time.time()
         diff = np.linalg.norm(np.expand_dims(query, 0) - db_np, axis=1)
         nn_idx = np.argsort(diff)
         nn_dist = diff[nn_idx]
+        #print(nn_idx[0:k])
+        #print(nn_dist[0:k])
         brute_time_sum += time.time() - begin_t
     print("Kdtree: build %.3f, knn %.3f, radius %.3f, brute %.3f" % (construction_time_sum * 1000 / iteration_num,
+                                                                     knn_time_sum * 1000 / iteration_num,
+                                                                     radius_time_sum * 1000 / iteration_num,
+                                                                     brute_time_sum * 1000 / iteration_num))
+
+    print("--------------")
+    construction_time_sum = 0
+    knn_time_sum = 0
+    radius_time_sum = 0
+    brute_time_sum = 0
+    iteration_num = 0
+    for file in files:
+        if file.find('bin') == -1:
+            continue
+        iteration_num += 1
+        filename = os.path.join(root_dir, file)
+        db_np = read_velodyne_bin(filename)
+
+        begin_t = time.time()
+        tree = KDTree(db_np)
+        construction_time_sum += time.time() - begin_t
+
+        query = db_np[0,:]
+
+        begin_t = time.time()
+        result_set = tree.query(([query[0], query[1], query[2]]), k=k, p=2)
+        # print(result_set)
+        knn_time_sum += time.time() - begin_t
+        # print("--------")
+        begin_t = time.time()
+        result_set = tree.query_ball_point(([query[0], query[1], query[2]]), radius)
+        # print(result_set)
+        radius_time_sum += time.time() - begin_t
+        # print("--------")
+        begin_t = time.time()
+        diff = np.linalg.norm(np.expand_dims(query, 0) - db_np, axis=1)
+        nn_idx = np.argsort(diff)
+        nn_dist = diff[nn_idx]
+        # print(nn_idx[0:k])
+        # print(nn_dist[0:k])
+        brute_time_sum += time.time() - begin_t
+    print("Scipy Kdtree: build %.3f, knn %.3f, radius %.3f, brute %.3f" % (construction_time_sum * 1000 / iteration_num,
                                                                      knn_time_sum * 1000 / iteration_num,
                                                                      radius_time_sum * 1000 / iteration_num,
                                                                      brute_time_sum * 1000 / iteration_num))
