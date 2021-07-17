@@ -140,6 +140,9 @@ def overlaps(query: np.ndarray, radius: float, octant: Octant):
     :param octant:
     :return:
     """
+    if octant is None:
+        return False
+
     query_offset = query - octant.center
     query_offset_abs = np.fabs(query_offset)
 
@@ -224,7 +227,22 @@ def octree_radius_search(root: Octant, db: np.ndarray, result_set: RadiusNNResul
 
     # 作业6
     # 屏蔽开始
-
+    offset = query - root.center
+    child_idx = 0
+    if offset[0] > 0:
+        child_idx |= 1
+    if offset[1] > 0:
+        child_idx |= 2
+    if offset[2] > 0:
+        child_idx |= 4
+    if not octree_radius_search(root.children[child_idx], db, result_set, query):
+        for idx, r in enumerate(root.children):
+            if child_idx == idx:
+                continue
+            if not overlaps(query, result_set.worstDist(), root.children[idx]):
+                continue
+            if octree_radius_search(root.children[idx], db, result_set, query):
+                return True
     # 屏蔽结束
 
     # final check of if we can stop search
@@ -252,7 +270,22 @@ def octree_knn_search(root: Octant, db: np.ndarray, result_set: KNNResultSet, qu
 
     # 作业7
     # 屏蔽开始
-
+    offset = query - root.center
+    child_idx = 0
+    if offset[0] > 0:
+        child_idx |= 1
+    if offset[1] > 0:
+        child_idx |= 2
+    if offset[2] > 0:
+        child_idx |= 4
+    if not octree_knn_search(root.children[child_idx], db, result_set, query):
+        for idx, r in enumerate(root.children):
+            if child_idx == idx:
+                continue
+            if not overlaps(query, result_set.worstDist(), root.children[idx]):
+                continue
+            if octree_knn_search(root.children[idx], db, result_set, query):
+                return True
     # 屏蔽结束
 
     # final check of if we can stop search
@@ -291,40 +324,41 @@ def main():
 
     root = octree_construction(db_np, leaf_size, min_extent)
 
-    # depth = [0]
-    # max_depth = [0]
-    # traverse_octree(root, depth, max_depth)
-    # print("tree max depth: %d" % max_depth[0])
+    depth = [0]
+    max_depth = [0]
+    traverse_octree(root, depth, max_depth)
+    print("tree max depth: %d" % max_depth[0])
 
-    # query = np.asarray([0, 0, 0])
-    # result_set = KNNResultSet(capacity=k)
-    # octree_knn_search(root, db_np, result_set, query)
-    # print(result_set)
-    #
-    # diff = np.linalg.norm(np.expand_dims(query, 0) - db_np, axis=1)
-    # nn_idx = np.argsort(diff)
-    # nn_dist = diff[nn_idx]
-    # print(nn_idx[0:k])
-    # print(nn_dist[0:k])
+    query = np.asarray([0, 0, 0])
+    result_set = KNNResultSet(capacity=k)
+    octree_knn_search(root, db_np, result_set, query)
+    print(result_set)
+
+    diff = np.linalg.norm(np.expand_dims(query, 0) - db_np, axis=1)
+    nn_idx = np.argsort(diff)
+    nn_dist = diff[nn_idx]
+    print(nn_idx[0:k])
+    print(nn_dist[0:k])
 
     begin_t = time.time()
     print("Radius search normal:")
-    for i in range(100):
+    for i in range(10):
         query = np.random.rand(3)
         result_set = RadiusNNResultSet(radius=0.5)
         octree_radius_search(root, db_np, result_set, query)
     # print(result_set)
     print("Search takes %.3fms\n" % ((time.time() - begin_t) * 1000))
-
-    begin_t = time.time()
-    print("Radius search fast:")
-    for i in range(100):
-        query = np.random.rand(3)
-        result_set = RadiusNNResultSet(radius=0.5)
-        octree_radius_search_fast(root, db_np, result_set, query)
-    # print(result_set)
-    print("Search takes %.3fms\n" % ((time.time() - begin_t) * 1000))
+    #
+    # begin_t = time.time()
+    # print("Radius search fast:")
+    # for i in range(100):
+    #     query = np.random.rand(3)
+    #     result_set = RadiusNNResultSet(radius=0.5)
+    #     octree_radius_search_fast(root, db_np, result_set, query)
+    # # print(result_set)
+    # print("Search takes %.3fms\n" % ((time.time() - begin_t) * 1000))
 
 
 if __name__ == '__main__':
     main()
+

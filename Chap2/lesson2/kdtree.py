@@ -79,9 +79,9 @@ def kdtree_recursive_build(root, db, point_indices, axis, leaf_size):
         # 屏蔽开始
 
         n = len(point_indices_sorted)
-        pnt_idx_left = point_indices_sorted[:int(n/2)]
-        pnt_idx_right = point_indices_sorted[int(n/2):]
-        root.value = db[int(n/2), axis]
+        pnt_idx_left = point_indices_sorted[:int(n / 2)]
+        pnt_idx_right = point_indices_sorted[int(n / 2):]
+        root.value = db[int(n / 2), axis]
 
         new_axis = axis_round_robin(axis, db.shape[1])
         root.left = kdtree_recursive_build(root.left,
@@ -165,26 +165,26 @@ def kdtree_knn_search(root: Node, db: np.ndarray, result_set: KNNResultSet, quer
         # Search in right side
         kdtree_knn_search(root.right,
                           db,
-                          KNNResultSet,
+                          result_set,
                           query)
-        if KNNResultSet.worstDist() > (query[axis] - root.value):
+        if result_set.worstDist() > (query[axis] - root.value):
             kdtree_knn_search(root.left,
                               db,
-                              KNNResultSet,
+                              result_set,
                               query)
 
     else:
         # Search in left side
         kdtree_knn_search(root.left,
                           db,
-                          KNNResultSet,
+                          result_set,
                           query)
-        if KNNResultSet.worstDist() > (root.value - query[axis]):
+        if result_set.worstDist() > (root.value - query[axis]):
             kdtree_knn_search(root.right,
                               db,
-                              KNNResultSet,
+                              result_set,
                               query)
-        pass
+
     # 屏蔽结束
 
     return False
@@ -213,7 +213,30 @@ def kdtree_radius_search(root: Node, db: np.ndarray, result_set: RadiusNNResultS
     # 作业3
     # 提示：通过递归的方式实现搜索
     # 屏蔽开始
+    axis = root.axis
+    if query[axis] > root.value:
+        # Search in right side
+        kdtree_radius_search(root.right,
+                             db,
+                             result_set,
+                             query)
+        if result_set.worstDist() > (query[axis] - root.value):
+            kdtree_radius_search(root.left,
+                                 db,
+                                 result_set,
+                                 query)
 
+    else:
+        # Search in left side
+        kdtree_radius_search(root.left,
+                             db,
+                             result_set,
+                             query)
+        if result_set.worstDist() > (root.value - query[axis]):
+            kdtree_radius_search(root.right,
+                                 db,
+                                 result_set,
+                                 query)
     # 屏蔽结束
 
     return False
@@ -235,24 +258,23 @@ def main():
     traverse_kdtree(root, depth, max_depth)
     print("tree max depth: %d" % max_depth[0])
 
-    # query = np.asarray([0, 0, 0])
-    # result_set = KNNResultSet(capacity=k)
-    # knn_search(root, db_np, result_set, query)
-    #
-    # print(result_set)
-    #
-    # diff = np.linalg.norm(np.expand_dims(query, 0) - db_np, axis=1)
-    # nn_idx = np.argsort(diff)
-    # nn_dist = diff[nn_idx]
-    # print(nn_idx[0:k])
-    # print(nn_dist[0:k])
-    #
-    #
-    # print("Radius search:")
-    # query = np.asarray([0, 0, 0])
-    # result_set = RadiusNNResultSet(radius = 0.5)
-    # radius_search(root, db_np, result_set, query)
-    # print(result_set)
+    query = np.asarray([0, 0, 0])
+    result_set = KNNResultSet(capacity=k)
+    kdtree_knn_search(root, db_np, result_set, query)
+
+    print(result_set)
+
+    diff = np.linalg.norm(np.expand_dims(query, 0) - db_np, axis=1)
+    nn_idx = np.argsort(diff)
+    nn_dist = diff[nn_idx]
+    print(nn_idx[0:k])
+    print(nn_dist[0:k])
+
+    print("Radius search:")
+    query = np.asarray([0, 0, 0])
+    result_set = RadiusNNResultSet(radius = 0.5)
+    kdtree_knn_search(root, db_np, result_set, query)
+    print(result_set)
 
 
 if __name__ == '__main__':
